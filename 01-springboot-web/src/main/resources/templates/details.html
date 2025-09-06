@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+    <!--xmlns: xml namespace
+    :th se le da el nombre de th a ese namespace, se usara th para usar las funciones -->
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${title}"></title> 
+</head>
+<body>
+    <h1 th:text="${title}"></h1>
+    <ul>
+        <li th:text="${user.name}"></li> <!--Uso de dolar para objetos-->
+        <li th:text="${user.lastname}"></li>
+        <li th:if="${user.email}" th:text="${user.email}"></li>
+        <li th:if="${user.email == null}" th:text="${'No tiene email'}"></li>
+    </ul>
+    <a th:href="@{/list}">ver listado</a><br><!--Uso de @ para enlaces-->
+    <a th:href="@{'/api/params/foo?message='+ ${title}}">ver mensaje</a><br><!--Uso de @ para enlaces-->
+    <!--Aunq se escriban las variables entre "" se toman como codigo, por eso se usa '' en el inicio
+    del path para que lo tome como string y luego concatenarlo con el valor de la variable title, si
+    no se hace asi, daria error al no encontrar un objeto llamado /api/params/foo?message=+${title}}-->
+    <a th:href="@{/api/params/foo(message='Hola que tal festival')}">ver mensaje2</a><br>
+    <a th:href="@{/api/params/bar(message='Hola que tal festival', code=32323)}">ver var mix 2 params</a><br>
+    <a th:href="@{/api/var/baz/Hola algun mensaje}">ver var path variable</a><br>
+    <a th:href="@{'/api/var/baz/'+${title}}">ver var path variable 2</a><br>
+    <a th:href="@{'/api/var/baz/'+ 'Hola algun mensaje'}">ver var path variable 3</a><br>
+</body>
+</html>
+
+<!--
+th:text="" - agrega un valor a una etiqueta, se incluye el nombre de
+la variable ya sea del request/session/application entre las comillas
+-->
