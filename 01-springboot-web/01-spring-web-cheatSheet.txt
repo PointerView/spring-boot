@@ -1,0 +1,92 @@
+
+
+
+========================= CREACION DE CONTROLADORES =========================
+
+1.- Se crean controladores simples que solo retornan vistas con @Controller en la clase, estas retornan vistas y si se quiere pasar algun dato se usara el parametro injectado de tipo
+Model o Map y no se retorna sino que automaticamente se pasa a la vista como atributos del request.
+
+2.- Para crear diferentes endpoints en el Controller se usa @GetMapping() para crear un verbo get y se le puede dar un path personalizado o dejarlo por defecto que seria la raiz o 
+el path del controlador.
+
+3.- Para crear un path general del controlador se usa RequestMapping() y ese path sera compartido por todos los endpoints junto con la extension opciona que le de cada uno de los metodos.
+
+4.- Si se quiere retornar valores complejo y no vistas se usara un controlador que sea @ResponseBody lo cual aplicara a todos los metodos, o aplicar esta misma anotacion a los metodos que
+queramos que retorne un objeto JSON en el body. Tambien se puede en vez de usar @Controller y @ResponseBody, se puede usar el stereotype @RestController que contienen ambas etiquetas mencionadas.
+
+5.- Si queremos recibir parametros en un get, como estandar se pasa como queryParam (?key=value&key=value) y esto se recibe en los paramentros del metodo con @RequestParam, pero tambien esta otro
+modo de enviar el cual es mejor para temas de indexacion y SEO que es con PathVariable que se incluir el paramentro como parte del mismo path (path/{value}) y esto se obtiene poniendo junto a un
+parametro en @PathVariable, de los dos modos el key debera de ser igual que el nombre del atributo y si esto no es asi se debera de agregar el name en la anotacion.
+
+6.- En peticiones post donde normalmente se pasan objetos complejos se requerira de la anotacion @RequestBody, parecida a ResponseBody que es para la respuesta, pues en este caso para la peticiones
+seria @RequestBody, de este modo spring ajustara el json recibido a una instancia del objeto.
+
+7.- Si se quiere inyectar una propertie se usa @Value("${}") con una expresion y el nombre de la property, eso si, este file de properties debe de haber sido agregado a los propertySource de las configs
+
+8.- Si queremos instanciar un objeto de una clase, esta si es anotada con @Componente se agregaria al contexto de beans de spring y asi se podria inyectar su valor declarativamente mediante la 
+anotacion @Autowired, muy parecido al @Inject de API CDI.
+
+9.- Para la creacion de componentes de services y de repositories estan los Stereotypes de @Service y @Repository que por debajo hacen a las clases componentes.
+
+10.- En spring los componentes tambien tienen contextos y ambitos los cuales pueden ser 4 que serian los siguientes:
+ * Singleton: Un solo objeto en una sola aplicacion de spring de las muchas que pueden haber en un servidor
+ * ApplicationScope: Un objeto para todas las aplicaciones de spring, alcance mas aplio que el Singleton
+ * SessionScope: Un objeto para toda la aplicacion pero asignada a un unico cliente.
+ * RequestScope: Un objeto para un cliente para una sola request
+ 
+11.- Al igual que todo objeto que tiene un ambito tiene un ciclo de vida y aqui es lo mismo, se tiene el @PostConstruct el cual el metodo se ejecutara justo despues de completar el objeto contando con 
+la ejecucion del constructor y la inicializacion de los atributos, y luego esta @PreDestroy lo cual se ejecuta justo antes de destruir el objeto
+
+12.- Cuando se quiere inject de un objeto de una clase propia con anotar con Component y usar @Inject ya vale pero si se quiere injectar un tipo de dato mas complejo que requiere de algun tipo de preparacion
+se pueden crear BeansFactories, estos son metodos anotados con @Bean que retorna un valor y ese es injectado en una variable, esto se hace binding mediante el tipo de dato de retorno, si se hace @Bean que retorna
+un List<Pelotas> y luego se hace un @Inject a un List<Pelotas> se injecta el retorno de ese metodo, si se tienen multiples beansFactories que retornan un mismo tipo se puede usar Primary o darle un nombre al bean.
+
+========================= EXCEPCIONES =========================
+
+Para el manejo de excepciones se pueden crear un manejador global de excepciones en una clase mediante @RestControllerAdvice que contiene @ResponseBody y @ControllerAdvice para el manejo de excepciones, depues
+se crean metodos que con @ExpcetionHandler(claseExcepcion) se puede indicar que si salta esta expcepcion se ejecute el metodo, dentro se retornara un ResponseEntity con el cual se puede manejar tanto el body como 
+los headers y el status, es un wrapper total de la respuesta HTTP, ahi se dara un status de error y un body de un objeto o map con info sobre el error si es necesario. Tambien se puede dar un status estatico que no
+se defina en el ResponseEntity y es mediante la anotacion en el metodo de @ResponseStatus(HttpStatus.XXX) y siempre que entre a este metodo por la excepcion indicada retornara ese mismo estado siempre. Importante
+saber que un metodo puede tener en el ExpcetionHandler una o mas clases de expeciones. Tambien importante saber que estos metodos tiene el paramentro de la excepcion donde se podra encontrar informacion de la misma
+como el mensaje enviada a la hora de instanciar y lanzar la expcepcion misma.
+
+========================= INTERCEPTORS =========================
+
+Para crear interceptores primero se debe de crear una clase componente que implemente la interfaz HandlerInterceptor, esta tiene en el contrato dos metodos obligatorios que son preHandle y postHandle, ambos
+tienen como parametros el HttpServletRequest, HttpServletResponse y el Object que es el metodo el cual se esta interceptando, el postHandle es void pero en preHandle es boolean siendos asi porque si retorna true
+ejecutara el metodo interceptado pero si retorna false finalizara la ejecucion. Para pasar datos no se puede usar el return sino el HttpServletResponse.
+Cuando se tiene creado el interceptor hay que hacer binding al metodo/metodos que se quieran interceptar y eso se hace desde una clase de configuracion que implemente la interfaz de WebMvcConfigure que tiene en
+contrato el metodo addInterceptors con el parametro de InterceptorResistry con el cual se podra usar el metodo registry.addInterceptor(objetoInterceptor).addPathPatterns() y ahi indicar los endpoins a interceptar,
+tambien se puede usar excludePatterns() y excluir los puestos como argumentos.
+La diferencia de los Interceptores de Spring y de Jakarta es que en spring interceptan la peticion HTTP como los filters de Jakarta mientras que los interceptors de Jakarta interceptan el metodo
+
+========================= AOP(Aspect Oriented Programing) =========================
+
+La AOP es parecido a los interceptores de JakartaEE, interceptan la ejecucion de un metodo y todo ello lo hacen unos metodos dentro de una clase de aspectos, para crear todo esto seria :
+
+1.- Crear una clase que sea anotada con @Aspect y @Component.
+
+2.- Dentro se podra implementar metodos con los diferentes momentos donde se puede interceptar los metodos que son los siguientes:
+| Anotación         | Se ejecuta…                                     |
+| ----------------- | ----------------------------------------------- |
+| `@Before`         | Antes del método                                |
+| `@After`          | Siempre después (éxito o error)                 |
+| `@AfterReturning` | Solo si el método devuelve sin error            |
+| `@AfterThrowing`  | Solo si el método lanza excepción               |
+| `@Around`         | Antes y después (puede reemplazar la ejecución) |
+
+Estos metodos siempre se ejecutan en un mismo orden que seria:
+
+@Around (antes)
+   └─> @Before
+        └─> Método objetivo
+              ├─> @AfterReturning (si OK)
+              └─> @AfterThrowing (si error)
+        └─> @After (siempre)
+@Around (después)
+
+Si un metodo esta interceptado por mas de un metodo se usa la anotacion Order(num) para indicar cual tiene la prioridad pero no significa que primero se ejecute todo de una clase y luego otra sino que
+se da prioridad a un metodo con una anotacion y luego se ejecuta el otro metodo con la misma anotacion de la otra clase para que despues se vuelva a la clase con mas prioridad y se pase al segundo metodo
+que seria el before despues del around.
+
+**Los metodos de AOP interceptan el metodo como los interceptores de JakartaEE
