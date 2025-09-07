@@ -26,6 +26,11 @@ seria @RequestBody, de este modo spring ajustara el json recibido a una instanci
 8.- Si queremos instanciar un objeto de una clase, esta si es anotada con @Componente se agregaria al contexto de beans de spring y asi se podria inyectar su valor declarativamente mediante la 
 anotacion @Autowired, muy parecido al @Inject de API CDI.
 
+8.1.- Si se quiere usar @Autowired pero hay mas de una posible implementacion se pueden solucionas de tres principales modos:
+	--> Usar la anotacion @Primary en el componente para dejar los demas como secundarios e inyectar el principales
+	--> Usar Qualifier indicando el nombre de la clase(nombre asignado por defecto al componente) o el nombre personalizado indicado en Component('name')
+	--> Usar en el nombre del atributo el nombre del componente ya sea el nombre por defecto o el asignado personalizado en Component.
+
 9.- Para la creacion de componentes de services y de repositories estan los Stereotypes de @Service y @Repository que por debajo hacen a las clases componentes.
 
 10.- En spring los componentes tambien tienen contextos y ambitos los cuales pueden ser 4 que serian los siguientes:
@@ -90,3 +95,39 @@ se da prioridad a un metodo con una anotacion y luego se ejecuta el otro metodo 
 que seria el before despues del around.
 
 **Los metodos de AOP interceptan el metodo como los interceptores de JakartaEE
+
+
+========================= TRANSACCIONES =========================
+
+Para el manejo de transacciones tambien se manejan de manera automaticamente dependiendo si es para operaciones de lectura o de escritura,
+en ambas se usa la anotacion de @Transaction pero para lectura se aplica en sus argumentos readOnly=true
+
+
+========================= SPRING BOOT JPA =========================
+
+1.- JPA aplicado a SB es muy similar a JPA nativo, anotaciones de @Entity, @Table para las clases, @Id, @GeneratedValues(), @Column(), @JoinColumn(),
+@JoinTable(), todas las anotaciones de asociaciones, todo esto es igual, pero la parte donde tiene extras seria en las imlementaciones de los
+repositorios, en JPA nativo se debes de crear las consultas pendiante JPQL o usando los metodos de find, merge, persist o delete pero en JPA con sprgin
+permite varias cosas.
+	--> Crear consultas nativas de sql mediante @Query(value="consulta", nativaQuery=true)
+	--> Crear consultas de JPQL @Query("consulta")
+	--> Crear consultas con queryMethods, usando palabras clave siempre empezando por findBy y luego keyWords para crear la consulta,
+		esto solo esta pensado para consultas SELECT
+Cuando se hacen queries que son UPDATE o DELETE se usa la anotacion @Modifying, pero no para SELECT o INSERT.
+
+2.- Importante saber que para la configuracion de Spring Data JPA no es necesario la configuracion del presistence.xml, con tan solo configurar
+el application.porperties es suficiente.
+
+3.- No trabaja directamente con el EntityManager si no que se usan los metodos de la implementacion de CrudRepository o JpaRepository los cuales ya
+incluyen un crud listo y el manejo de los recursos es automatico.
+
+4.- No es necesario implementar interfaces genericas para los diferentes repositorios porque con las que incluye JPA ya es suficiente.
+
+5.- Transacciones manejadas automaticamente con la anotacion @Transactional la cual se puede aplicar a nivel de metodo, clase o incluso de servicio
+y automaticamente se propagaria a todos los metodos.
+
+
+========================= SPRING VALIDATOR =========================
+
+
+========================= SPRING SECURITY =========================
