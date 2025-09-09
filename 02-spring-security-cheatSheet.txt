@@ -1,0 +1,180 @@
+SPRING SECURITY
+
+========================= CONFIGURACIONES BASICAS PARA ENCRIPTAR STRINGS Y CONFIGURAR ENDPOINTS =========================
+
+1.- Primero para poder encriptar contraseñas se requiere de un encoder y para ello se definen en clases de configuracion de spring @Configuration y dentro
+se crea un bean para poder injectar el encoder, este bean retornara el generico PasswordEncoder y la implementacion sera del algoritmo de encriptacion BCript
+con la instancia de new BCryptPasswordEncoder();
+
+2.- Luego para poder encriptar el password se usara el objeto de PasswordEncoder con la implementacio de BCript usando el metodo pw.encode() y se le pasa
+como argumento el password retornandolo encriptado como String.
+
+3.- Cuando se incluye las dependencias de spring security se convierten todos los endpoints de los controllers privados y se deben de configurar segundo
+las necesidades.
+
+4.-Para configurar esto se hace en la clase @Configuration donde esten las configuraciones de spring, ahi se creara un metodo que retorna un SecurityFilterChain
+que es el pipeline de confirmaciones que debera pasar la peticion para saber si esta o no autorizado y objeto el cual sera agregado a los filtros de spring, y
+como parametros tendra el HttpSecurity, objeto en el cual se incluiran todas las configuraciones de filtros.
+
+5.- Para indicar un endpoint se hace mediante requestMatchers("") donde se pondra un endpoint, ademas se puede incluir el tipo de verbo con HttpMethod
+para limitar ese endpoint aun mas y encadenado a ese metodo se podra usar por ejemplo permitAll() para permitir todos, los demas endpoints que no sean
+ese indicado nos referimos a ellos con anyRequest() refiriendose a las demas, se puede exigir autenticacion mediante el metodo encadenado authenticated().
+
+6.- tambien se puede aplicar el CSRF(Cross-Site Request Forgery) que es un mecanismo de seguridad para protegerse de peticiones maliciosas desde el lado de la
+vista por ejemplo en formularios, en el caso de trabajar sin ella se puede desabilitar con una lamda.
+
+7.- Al querer confirmar todas las peticiones de los usuarios y no guardar estados/informacion de usuario en el lado del servicor(Stateless) se usa el metodo
+encadenado sessionManagement(management -> management.sessionCreationPolicy(SessionCreationPolicy.STATELESS)) para asi confirmar que spring no almacenara
+info del usuario, sino que exigira pasar todas las peticiones por el SecurityFilterChain, si no se hiciese el servidor generariua una sesion asignada a 
+una JSESSIONID que se pasaria como cookie al cliente y si hace alguna peticion ya tendria guardado y asociado al JSESSIONID informacion como credenciales,
+informacion de seguridad informacion de la propia session HTTP.
+
+8.- Cuando se completan todas las configuraciones en el HttpSecurity para pasarlo al SecurityFilterChain se usa el metodo build().
+
+========================= VALIDACIONES DE USUARIOS =========================
+
+1.- Para poder validar un usuario en un login es necesario tener una clase @Service que implemente UserDetailsService el cual tiene el contrato de implementar el
+metodo loadUserByUsername que tiene como argumento el username, este username sera tomado automaticamente del parmetro de la request que se llame username y 
+en el caso de que no este o se llame de otro modo simplemente no lo detectara, para ello desde el front se debera de enviar desde el front con el nombre de
+parametro correcto, ademas, el endpoint por defecto de spring para manejar los logins es /login desde la raiz siendo un controller interno no definido por el
+programador por lo que las peticiones por defecto seria realizadas a ese mismo endpoint.
+
+2.- Si se quiere enviar desde el front otros nombres de parametros para el username y password como seria nombre y contraseña se podria usar el SecurityFilterChain
+que seria el metodo donde se configura la autorizacion de acceso de las request y con el HttpSecurity se podria modificar las caracteristicas del http.formLogin
+asignando por ejemplo el loginProcessingUrl("") para indicar otra ruta para el procesamiento del usuario, o usar usernameParameter() y passwordParameter() para
+modificar los nombres de los parametros. Un ejemplo seria:
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http
+        .formLogin(form -> form
+            .loginProcessingUrl("/api/login")   // <-- aquí cambias el endpoint
+            .usernameParameter("username")      // opcional, si quieres cambiar nombre de parámetro
+            .passwordParameter("password")      // opcional
+            .permitAll()                        // permite acceso sin autenticar
+        )
+        .authorizeHttpRequests(auth -> auth
+            .anyRequest().authenticated()
+        );
+
+    return http.build();
+}
+
+3.- Este controller su idea es de autenticar el usuario y asi crear una sesion(Statefull) con la info del usuario(UserDetails, roles y pasword encriptado) y retornandolo
+un JSESSIONID asociada a la sesion que se almacena en las cookies y cada request que haga se pasara ese JSESSIONID con el cual el servidor podra recuperar sus credenciales,
+en caso de usar JWT seria Stateless que es justo lo que se busca usandolo, no se guardaria sesion sino que se pasaria el token en cada request y se deberia de validar.
+
+4.- El objetivo de ese endpoint /login es que spring por detras llame al metodo de la clase con la implememtacion de UserDetailsService donde esta la implementacion
+de la autenticacion y finalmente retorne el wrapper del usuario autenticado de la clase User de userdetails donde estara el usuario, contraseña, si esta o no activo,
+sus roles, etc.
+
+5.- Para pasarle los roles no se pueden pasara de cualquier modo, se deben de pasar dentro de una interfaz wrapper llamada GrantedAuthority la cual usando la 
+implementacion SimpleGrantedAuthority se podra incluir en ella el nombre del rol. Como norma general, un usuario tiene mas de un GrantedAuthority por lo que lo normal
+es crear una lista de GrantedAuthority y pasarla dentro del constructor de User de userdetails.
+
+
+========================= IMPLEMENTACION DE JWT =========================
+
+1.- Primero para imlpementar jwt es necesario crear un filtro, esto se realiza con una clase que implemente el UsernamePasswordAuthenticationFilter y dentro se
+sobreecribiria el metodo attempAuthentication(HttpServletRequest, HttpServletResponse), este filter donde se agrega depues pasa por debajo el request con el
+username y password y lo primero seria obtenerlos.
+
+2.- Tambien se necesita una instancia de AuthenticationManager que es el gestor de autenticacion que se encarga de validar las credenciales usando el UserDetailsService
+y el PasswordEncoder declarados previamente. La instancia del mismo como norma general se pasa como argumento al constructor de la clase.
+
+3.- Para obtener los datos, lo correcto seria crear un Objeto de tipo User de nuestros models y usar new ObjectMapper para convertir el JSON enviado a tipo objeto,
+y para obtener el string del request se puede usar el objeto request.getInputStream() pasandolo como primer parametro siendo el dato a mapear y como segundo valor
+la clase User.class de los models, se usa esta clase porque se tiene el atributo username y password y se puede mapear al coincidir con los parametros. Porque hay
+que recordar que el back define las reglas(nombres de parametros y funcionalidades) y el front debe seguirlas.
+
+4.- Cuando se tiene los datos de la request ya sea en el objeto User o en variables de username y password deben de usarse para crear una instancia de la clase
+UsernamePasswordAuthenticationToken al cual se le pasa en su constructor el usernme y password. Este Token se usara para luego llamar al metodo del authenticationManager
+authenticationManager.authenticate(authenticationToken), esto se hace para que spring llame al loadUserByUsername pasandole el username almacenado en el authenticationToken,
+luego retorna el UserDetails con los roles y la contraseña encriptada(a partir del username), despues encripta la contraseña pasada en el request en texto plano con el 
+PasswordEncoder previamente creado desde el @Bean con la implementacion del algoritmo BCryptPasswordEncoder, en ese momento compara las contraseñas, y si son iguales retorna
+el objeto Authentication que contiene el objeto UserDatails, credenciales... El flujo del filtro seria el siguiente :
+
+Petición POST /api/login con JSON
+      │
+      ▼
+attemptAuthentication()
+      │
+      ├─> Leer JSON del request y extraer username/password
+      ├─> Crear UsernamePasswordAuthenticationToken con los datos de username/password
+      └─> Llamar authenticationManager.authenticate(UsernamePasswordAuthenticationToken) 
+              │
+              ▼
+     UserDetailsService.loadUserByUsername(username) 
+              │
+			  ├─>Busca el password del username en la BBDD y la compara con la del request pero antes pasandola por el PasswordEncoder
+			  │  para poder hacer la comparacion
+              ▼
+     Validación de contraseña y roles
+              │
+              ▼
+     Authentication autenticado (devuelto)
+
+
+========================= CREACION DEL JWT EN CASO DE AUTHENTICATION SUCCESSFULL =========================
+
+5.- Cuando ya se tiene el Authetication listo, es necesario crear los metodos para el caso de que sea successful o unsuccessful, para el successful seria necesario crear
+el metodo successfulAuthentication sobreescrito de la herencia de la implementacion de la clase UsernamePasswordAuthenticationFilter, en este caso al trabajar con JWT
+se debera de crear el mismo y enviarlo en el response, esto se realiza primero obteniendo del parametro Authentication el UserDetails, eso se hace mediante el metodo
+authResult.getPrincipal() el cual retorna un Object el cual se puede castear a la implementacion de UserDetails que seria la clase User mediante casteo manual.
+
+6.- Despues de obtener el objeto User con el contenido del UserDetails solo quedaria tener una secret_key con la que firmar el JWT, para ello se en estos momentos
+Jwts.SIG.HS256.key().build() aunque esto suele cambiar a veces pero con mirar en la documentacion de JWT como crear una firma/clave secreta ya estara indicado, estas
+firmas no se pasan entre request, siempre se quedan en el lado del servidor para mayor seguridad.
+
+7.- Teniendo ya el username y la secret_key ya se podria construir el JWT, esto se hace mediante eun metodo estatico de la clase Jwts del siguiente modo:
+String token = Jwts.builder()
+    .subject(username)     → metes el nombre de usuario como el “dueño” del token.
+    .signWith(SECRET_KEY)  → firmas el token con tu clave secreta para que no pueda ser manipulado.
+    .compact();            → genera el string final del JWT.
+	
+8.- Este seria el modo mas simple de crear un token pero solo usa un claim(payload/info) estandar que es subject, los otros dos metodos forman parte de las necesidades de
+la creacion del token, pero se pueden agregar mas claims estandars , estos son los mas tipicos de usar:
+	→ issuer (quién emitió el token)
+	→ subject (el usuario principal)
+	→ audience (quién puede usarlo)
+	→ expiration (fecha de caducidad)
+	→ issued at (fecha de emisión)
+	
+9.- Son claims estandar porque Jwts creo metodos directos para agregarlos pero tambien se pueden crear claims personalizados, estos se crean mediante otro metodo estatico de Jwts
+que seria Jwts.claims() el cual con el .add() se puede hacer mediante key value pair a lo Map nuevos claims, tras agregar todos se usar build() para crear un solo objeto de tipo
+Claims el cual en el builder() del Jwts se puede usar el metodo claims() y pasar el objeto de tipo Claims por argumento agregandose al token de JWT.
+
+10.- En los claims lo normal es guardar los roles, para elos se pueden obtener tanto del objeto User implementacion de UserDatails, como de el parametro Authentication con el metodo
+getAuthorities, el ultimo metodo es mas recomendado porque User solo retorna GrantedAuthority pero el getAuthorities() retorna un generico que herede de GrantedAuthority
+<? GrantedAuthority> lo cual si en algun momento se cambia de implementacion este modo seria mas generico. Pero sea como sea retorna un Collection<> de un tipo generico asique el retorno
+se tendra que guardar en una variable de ese tipo y posteriormente guardarlo en el objeto claims el cual lo normal seria guardarlo pasado a String con el ObjectMapper porque tras retornarlo
+en el response dentro del JSON, si no se pasa a string no se vera su contenido.
+
+11.- Tras hacer el compat() del token retorna el token en un String, tras tenerlo hay que pasarlo al response, esto se hace primero indicando el el header el tipo de respuesta que
+mediante la key "Authorization" y con el valor que seria el token, pero eso si, siempre debe de ir precedido de la palabra clave estandar Bearer, esto solo indica que el header es
+poseedor de un token y ademas al haber otros tipos de esquemas de token aparte de JWT ponerlo ayuda a diferenciarlo, ademas los filtros toman los headers y necesitan Bearer para saber
+si tiene token y de ese modo obtenerlo. Tras configurar el header queda configurar el contentType, este sera "application/json" ya que a parte de pasar el token en el header, lo normal
+es tambien pasarlo en el cuerpo de la respuesta por eso es que se pone el tipo de respuesta ya que hay que recordar que aqui no se tiene un RestController y hay que configurarlo manualmente.
+Muy importante saber que spring no hace pasar todas las request por todos los filtros, lo que hace es dependiendo del header de la peticion pasara por unos y no por otros, por eso es
+importante incluir el header de authorization con el Bearer token
+
+12.- Tras tener todo configurado quedaria crear un Map con minimo el token y el username, y tambien se podria poner algun mensaje de inicio de sesion o algo asi.
+
+13.- Tras tener el Map listo se debera de primero pasar este objeto al response, como solo puede almacenar datos mediante su writer y solo pueden ser strings, sera necesario pasar
+el objeto en modo string, para ello se puede usar el new ObjectMapper().writeValueAsString(objeectMap) el cual convierte el objeto a string.
+
+14.- Finalmente se establece el status de la respuesta, en este caso como esta autorizado lo normal es poner un OK(200)
+
+
+========================= RESPUESTA EN CASO DE AUTHENTICATION UNSUCCESSFULL =========================
+
+Primero de todo es importante saber que estos metodos de successfulAuthentication y unsuccessfulAuthentication no se deben de llamar manualmente en ningun lado, spring dependiendo del
+resultado de la autorizacion llamara por el mismo a un metodo o a otro. 
+
+15.- En caso de no ser autorizado a acceder al path pues se accedera a este metodo y aunque no se le puede pasar el token se debera de dar algun tipo de respuesta para informar de lo
+sucedido para que el front pueda responder tambien, para ello lo normal es crear un Map con un mensaje de error, ademas a diferencia del successfulAuthentication que tiene como parametro
+el objeto Authentication con la info del UserDetails, en este metodo esta el parametro de tipo AuthenticationException el cual tiene info interna del error, info la cual seria tambien
+importante de agregar al map para pasarlo a la respuesta.
+
+16.- Tras completar el Map con la info se debera como siempre configurar el contentType que tambien seria appplication/json por pasar un Map, y tambien configurar el status a Unauthorized(401).
+
+17.- Finalmente se debera de agregar el map a la respuesta pasandolo antes a string con el ObjectMapper().writeValueAsString(map);

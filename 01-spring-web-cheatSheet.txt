@@ -129,5 +129,19 @@ y automaticamente se propagaria a todos los metodos.
 
 ========================= SPRING VALIDATOR =========================
 
+En SpringBoot Validator se tiene el modo basico de validacion que es mediante las anotaciones propias de la libreria como @NotNull, @NotEmpty... y luego
+aplicar la anotacion @Valid antes del objeto a validar y posteriormente la interfaz de BindingResult que contendria toda la informacion de la validacion
+pero en muchos casos esto es insuficiente y se requiere de crear validadores personalizados y esto se haria del siguiente modo:
 
-========================= SPRING SECURITY =========================
+1.- Se crea una interfaz de anotacion la cual se anotara con @Constraint(validatedBy = XXX.class), de este modo crearemos una anotacion binding que se
+aplicara a los elementos que queramos validar, tipos de datos los cuales se debe de indicar en el @Target y ademas indicar que el @Retention es Runtime,
+ademas dentro de la anotacion se debera de incluir minimo un metodo con esta firma String message() default "mensaje que devuelve si no pasa la validacion"
+
+2.- Cuando se tenga la anotacion se debera de vincular la misma con la clase que tendra el metodo validador, esto se hace mediante la interfaz a implementar
+ConstraintValidator<AnotacionBinding, TipoDeDatoAValidar> la cual en el contrato implementara el metodo isValid donde se implementara la validacion y retornara
+true si todo salio bien o false si la validacion no salio correctamente. Ademas el metodo handler tiene dos parametros, el objeto que se esta validando y
+el contexto del validador con el cual se puede personalizar el error que pasaria el validator si es que retorna false
+
+3.- La anotacion se aplicara del mismo modo que se aplican las demas, sobre lo que se quiera validar
+
+
