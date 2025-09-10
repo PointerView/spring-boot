@@ -1,5 +1,8 @@
 SPRING SECURITY
 
+** Anotacion importante, tanto UsernamePasswordAuthenticationFilter como BasicAuthorizationFilter no son interfaces, son clases las cual seran heredadas.
+
+
 ========================= CONFIGURACIONES BASICAS PARA ENCRIPTAR STRINGS Y CONFIGURAR ENDPOINTS =========================
 
 1.- Primero para poder encriptar contraseñas se requiere de un encoder y para ello se definen en clases de configuracion de spring @Configuration y dentro
@@ -31,7 +34,7 @@ informacion de seguridad informacion de la propia session HTTP.
 
 8.- Cuando se completan todas las configuraciones en el HttpSecurity para pasarlo al SecurityFilterChain se usa el metodo build().
 
-========================= VALIDACIONES DE USUARIOS =========================
+========================= VALIDACIONES DE USUARIOS(AUTHENTICATION) =========================
 
 1.- Para poder validar un usuario en un login es necesario tener una clase @Service que implemente UserDetailsService el cual tiene el contrato de implementar el
 metodo loadUserByUsername que tiene como argumento el username, este username sera tomado automaticamente del parmetro de la request que se llame username y 
@@ -72,7 +75,7 @@ implementacion SimpleGrantedAuthority se podra incluir en ella el nombre del rol
 es crear una lista de GrantedAuthority y pasarla dentro del constructor de User de userdetails.
 
 
-========================= IMPLEMENTACION DE JWT =========================
+========================= IMPLEMENTACION DE JWT MEDIANTE FILTRO USERNAMEPASSWORDAUTHENTICATIONFILTER =========================
 
 1.- Primero para imlpementar jwt es necesario crear un filtro, esto se realiza con una clase que implemente el UsernamePasswordAuthenticationFilter y dentro se
 sobreecribiria el metodo attempAuthentication(HttpServletRequest, HttpServletResponse), este filter donde se agrega depues pasa por debajo el request con el
@@ -178,3 +181,105 @@ importante de agregar al map para pasarlo a la respuesta.
 16.- Tras completar el Map con la info se debera como siempre configurar el contentType que tambien seria appplication/json por pasar un Map, y tambien configurar el status a Unauthorized(401).
 
 17.- Finalmente se debera de agregar el map a la respuesta pasandolo antes a string con el ObjectMapper().writeValueAsString(map);
+
+========================= OBTENCION DEL AUTHENTICATION MANAGER Y AGREGACION DEL FILTRO =========================
+
+1.- Primero para obtenerlo se requiere de un objeto de la clase AuthenticationConfiguration el cual se obtiene mediante injeccion al ser un Bean de spring boot.
+
+2.- Para poder usar el AuthenticationManager en multiples lugares sin necesidad de instanciarlo manualmente lo mejor seria crear un Bean producer en un metodo en el cual se incluira en su
+definicion el metodo de la clase AuthenticationConfiguration authConf.getAuthenticationManager() el cual retorna el objeto de AuthenticationManager, y de este modo se podra obtener con Autowired.
+
+3.- Tras tener el @Bean del AuthenticationManager ya se podra agregar el filtro de autenticacion y autorizacion al SecurityFilterChain mediante el parametro del metodo filterChain
+HttpSecurity. Aqui se usaria el metodo addFilter() en el cual se pasara como argumento una instancia del objeto de la clase del filtro e importante, pasarle como argumento del constructor 
+el AuthenticationManager el cual hay que recordar que es el encargado de realizar la autenticacion mediante el paso del username y password al loadUserByUsername y confirmando si esta o no
+autorizado retornando el la implementacion User de la interfaz UserDetails el cual se almacena en el Authentication.
+
+
+========================= CONFIGURACION DEL VALIDADOR DEL JWT =========================
+
+1.- En el anterior filtro, solo pasaban las request que entraran por el endpoint /login que es el endpoint por defecto de Spring para formLogins, los demas no pasan y esto lo sabe spring por
+motivo de la herencia de UsernamePasswordAuthenticationFilter, ("Esta peticion se envio a /login?  ---> "Paso la request al filtro con la interfaz UsernamePasswordAuthenticationFilter").
+
+2.- En el caso de crear un filtro para poder validar el token, como la idea es que sea una validacion sin estado(Stateless) lo que se busca es validar todas las request por lo que se usaria una clase
+con la herencia de BasicAuthorizationFilter el spring pasa todas las request y por ello es que sera necesaio filtrar cuales deberan de pasar por el metodo de filtrado implementado en el contrato de
+la interfaz llamado doFilterInternal(HttpServletRequest, HttpServletResponse, FilterChain) el cual como se ve es un filter normal de JakartaEE pero personalizado para esto, y en el usar el if para confirmar
+si esa request contiene en los headers un token Bearer el cual validar, si no lo tiene tan solo se pasa al siguiente paso con doFilter(req, resp)
+
+3.- Importante tener definido un constructor que reciba el AuthenticationManager para poder realizar la validacion del token.
+
+4.- Para poder validar el token es necesario eliminar la palabra Bearer para solo quedarnos con el, lo mas comun es usar el replace("Bearer", "") para eliminarlo.
+
+5.- Para obtener la info del token se necesita un parser que convierta el token a la info que lo contiene, para ello se usar Jwts.parser() el cual retorna el parser.
+
+6.- El parser no sabe con que clave secreta se creo el token y con la cual tambien se usa para descifrarlo, por ello se le tiene que dar con el metodo del parser .verifyWith(SECRET_KEY)
+y luego usar el metodo .build() para aplicar la configuracion al parser.
+
+7.- Despues de tener listo el parser se debera de pasar el token a descifrar, para ello se usara el metodo del parser llamado .parseSignedClaims(TOKEN) y se le pasara el token como argumento.
+
+8.- Finalmente para obtener toda su info se usara el metodo .getPayload() que payload significa la informacion para que algo funcione, en este caso el token.
+
+9.- Todo este proceso se debera de colocar en un try-catch ya que el token podria haber sido manipulado o dejar de ser valido ya sea por expiracion o por otro motivo y dara una JwtException la cual se
+deberia de manejar y retornar en la respuesta un mensaje que avise sobre esto.
+
+10.-Tras usar este ultimo metodo getPayload(), retornara toda la info del token en forma de un objeto de clase Claims. Este objeto tiene los metodos para obtener los claims estandar y el metodo get()
+el cual pasando una key retornara el value igual que un Map.
+
+11.- Posteriormente se necesitara un Collection<? extends GrantedAuthority> pero nuestros authorities son retornados como JSON en un Object por lo que se necesitara convertirlo, esto se hace mediante
+un new ObjectMapper(). Jackson siempre analiza primero el JSON y los ordena en nodos de Kay/Value y luego busca crear una instancia con el constructor por defecto obteniendo un objeto vacio para 
+posteriormente usar los setters y colocar en cada atributo los valores ordenados en los JsonNodes. En el caso de SimpleGrantedAuthority no tiene ni constructor por defecto ni setters publicos por lo que
+se debera de usar un mixin que significa("Cuando vayas a instanciar un objeto de la clase X, usa el constructor de la clasee Y), se puede hacer de dos modos, dando como segundo paramentro una clase 
+abstracta personalizada para que jackson pueda instanciar el objeto, esto se hace con un constructor en clase abstracta anotado con @JsonCreator y luego en el constructor como parametro se usa 
+@JsonProperty("name") siendo el nombre la Key del JsonNode que queremos mapear a la variable incluida justo despues de la anotacion.
+Esta clase sera pasada como segundo argumento en el metodo del ObjectMapper().addMixIn(ClaseAInstanciar, ClaseAbstractaConElConstructor).
+
+12.- La segunda forma es usar la clase creada por defecto de SpringBoot que es SimpleGrantedAuthorityMixin.class la cual hace lo mismo que la que se crea personalizada.
+
+13.- Despues de tener el mixin se debe de pasar lo que se quiere mapear y a lo que se quiere mapear, esto se hace con el .readValue() de siempre y se le el objeto pero readValue solo acepta strings o 
+arrays de bytes por lo que se puede hacer de dos modos, readValue(authoritiesClaims.toString().getBytes(), SimpleGrantedAuthority[].class) asi se pasaria el flujo de bytes, pero para segun que tipo de 
+datos podria dar error, por ejemplo un Map, su key no es "primeraKey" sino primeraKey sin llaves lo cual json no acepta, por eso la segunda opcion mas segura seria usar el metodo del ObjectMapper()
+objMapper.writeValueAsString(authoritiesClaims) lo cual pasa un json valido a string y luego esto ya pasarlo al readValue dejando algo talque asi:
+
+ObjectMapper mapper = new ObjectMapper();
+String json = mapper.writeValueAsString(authoritiesClaims);
+SimpleGrantedAuthority[] authoritiesArray = mapper
+    .addMixIn(SimpleGrantedAuthority.class, SimpleGrantedAuthorityJsonCreator.class)
+    .readValue(json, SimpleGrantedAuthority[].class);
+
+** Probado que si no es un Map con pasarlo a string ya funciona, no es necesario pasar los bytes.
+
+14.- Tras tener esto se debe de guardar la info del token en el contenxto de seguridad y que se mantenga durante toda la request para que cuando llegue al verdadero endpoint de destino, esta info se mantenga
+en el contexto y se pueda hacer comprobaciones de roles, para hacer esto se añadira en el SecurityContextHolder con su metodo static getContext() para obtener el contexto, y despues agregar la autenticacion, esto
+se hace mediante el metodo setAuthentication() al cual se le pasa la info obtenida del token, esta info no se puede pasar de cualquier modo si no que al ser un traspaso de info del usuario entre metodos en medio
+de una request, se hara uso del UsernamePasswordAuthenticationToken al cual se le pasara el username, el Object generico donde estaba el json con los authorities el cual se pasa por conveniencia aunque podria ser null
+y las authorities que es el collection con las implementaciones de SimpleGrantedAuthority de GrantedAuthority.
+Entonces el ultimo paso de crear el UsernamePasswordAuthenticationToken y agregarlo al contexto de seguridad del request quedaria asi:
+
+UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(username, authoritiesClaims, authorities);
+SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+chain.doFilter(request, response);
+
+
+
+
+
+========================= USOS DEL AUTHENTICATION MANAGER =========================
+
+Es el corazon de spring, cualquier tipo de autenticación (username/password, JWT, OAuth) pasa por aquí si quieres usar el mecanismo estándar de Spring. Autenticar un objeto Authentication el cual contiene 
+el campo principal con el username o UserDetails, las credenciales , authorities que es una colección de GrantedAuthority y el authenticated que es un boolean para saber si ya ha sido autenticado
+
+El objeto Authentication sirve como “tarjeta de identidad” del usuario dentro de Spring Security:
+
+--> Transporta username y credenciales al AuthenticationManager para validar login.
+--> Transporta roles y permisos a Spring Security para decidir si puede acceder a un recurso (@PreAuthorize, filtros, etc.).
+--> Se almacena en el SecurityContext durante la request
+
+========================= USOS DEL UsernamePasswordAuthenticationToken =========================
+
+Es una clase wrapper que implementa Authentication que representa la autenticacion del usuario, esta clase wrapper almacena informacion completa sobre el usuario como la info principal que almacena el
+UserDetails, las credenciales o las authorities. Esta clase se usa como media de transporde de la info de autenticacion dentro de spring ya que como se ve se usa para pasar la info entre diferentes metodos
+que gestionan la autenticacion y autorizacion.
+
+========================= USOS DEL GrantedAuthority y SimpleGrantedAuthority =========================
+
+La primera es una Interfaz y la segunda es una clase que implementa la interzar, lo normal es usar instancias de la implementacion y almacenar los roles ya que la clase no es mas que una clase wrapper
+que almacena los roles y la cual spring utiliza para manejar las validaciones.

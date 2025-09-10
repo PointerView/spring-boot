@@ -6,12 +6,14 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.jsonwebtoken.JwtParser;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.jackson2.SimpleGrantedAuthorityMixin;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 
 import com.danihc.curso.springboot.app.crudjpa.springboot_crud.security.SimpleGrantedAuthorityJsonCreator;
@@ -48,15 +50,30 @@ public class JwtValidationFilter extends BasicAuthenticationFilter{
         String token = header.replace(PREFIX_TOKEN, "");
 
         try {
-            Claims claims = Jwts.parser().verifyWith(SECRET_KEY).build().parseSignedClaims(token).getPayload();   
+            JwtParser jwtParser = Jwts.parser().verifyWith(SECRET_KEY).build();
+            Claims claims = jwtParser.parseSignedClaims(token).getPayload();
+
             String username = claims.getSubject();
             //String username2 = (String) claims.get("username");
             Object authoritiesClaims = claims.get("authorities");
 
+            /* Usando la anotacion personalizada @JsonCreator
             Collection<? extends GrantedAuthority> authorities = Arrays.asList(
                 new ObjectMapper()
                 .addMixIn(SimpleGrantedAuthority.class, SimpleGrantedAuthorityJsonCreator.class)
                 .readValue(authoritiesClaims.toString().getBytes(), SimpleGrantedAuthority[].class));
+            */
+             // Usando la clase de spring SimpleGrantedAuthorityMixin.
+            ObjectMapper objMapper = new ObjectMapper();
+            String jsonAuthorities = objMapper.writeValueAsString(authoritiesClaims);
+
+             Collection<? extends GrantedAuthority> authorities = Arrays.asList(
+                new ObjectMapper()
+                .addMixIn(SimpleGrantedAuthority.class, SimpleGrantedAuthorityJsonCreator.class)
+                .readValue(authoritiesClaims.toString(), SimpleGrantedAuthority[].class)
+            );
+
+
 
             UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(username, authoritiesClaims, authorities);
 
