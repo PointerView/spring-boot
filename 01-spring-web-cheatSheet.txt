@@ -46,6 +46,9 @@ la ejecucion del constructor y la inicializacion de los atributos, y luego esta 
 se pueden crear BeansFactories, estos son metodos anotados con @Bean que retorna un valor y ese es injectado en una variable, esto se hace binding mediante el tipo de dato de retorno, si se hace @Bean que retorna
 un List<Pelotas> y luego se hace un @Inject a un List<Pelotas> se injecta el retorno de ese metodo, si se tienen multiples beansFactories que retornan un mismo tipo se puede usar Primary o darle un nombre al bean.
 
+
+** Recordar que la anotacion @Bean no solo injecta una instancia, tambien s
+
 ========================= EXCEPCIONES =========================
 
 Para el manejo de excepciones se pueden crear un manejador global de excepciones en una clase mediante @RestControllerAdvice que contiene @ResponseBody y @ControllerAdvice para el manejo de excepciones, depues
